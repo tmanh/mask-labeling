@@ -21,6 +21,16 @@ class OutputBlock(QtWidgets.QWidget):
         self.open_split_dir = QtWidgets.QPushButton('Browse...', self)
         self.open_split_dir.clicked.connect(self.on_click_open_split_dir)
 
+        self.stride_label = QtWidgets.QLabel('Stride:')
+        self.stride_spinbox = QtWidgets.QSpinBox(self)
+        self.stride_spinbox.setRange(1, 100)
+        self.stride_spinbox.setValue(24)
+
+        self.size_label = QtWidgets.QLabel('Size:')
+        self.size_spinbox = QtWidgets.QSpinBox(self)
+        self.size_spinbox.setRange(50, 256)
+        self.size_spinbox.setValue(128)
+
         formLayout = QtWidgets.QGridLayout()
         formLayout.addWidget(self.mask_dir_label, 0, 0)
         formLayout.addWidget(self.mask_dir_combobox, 0, 1)
@@ -29,6 +39,11 @@ class OutputBlock(QtWidgets.QWidget):
         formLayout.addWidget(self.split_dir_label, 1, 0)
         formLayout.addWidget(self.split_dir_combobox, 1, 1)
         formLayout.addWidget(self.open_split_dir, 1, 2)
+
+        formLayout.addWidget(self.stride_label, 2, 0)
+        formLayout.addWidget(self.stride_spinbox, 2, 1)
+        formLayout.addWidget(self.size_label, 2, 2)
+        formLayout.addWidget(self.size_spinbox, 2, 3)
         self.setLayout(formLayout)
 
         self.mask_dir_callback = mask_dir_callback

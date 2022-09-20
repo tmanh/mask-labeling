@@ -50,7 +50,7 @@ class LabelData:
         if osp.exists(mask_path):
             self.mask = cv2.cvtColor(cv2.imread(mask_path), cv2.COLOR_BGR2RGB)
         else:
-            self.mask = np.ones((self.height, self.width), np.uint8) * 255
+            self.mask = np.ones_like(self.image) * 255
 
     def to_qimage(self, image, height, width):
         bytes_per_line = 3 * width
@@ -63,6 +63,7 @@ class LabelData:
 class MainWindow(QMainWindow):
     FIT_WINDOW, FIT_WIDTH, MANUAL_ZOOM = 0, 1, 2
     BRUSH_MODE, ERASER_MODE = 0, 1
+    DRAWING_MODE, SPLITTING_MODE = 0, 1
 
     def __init__(self):
         super(MainWindow, self).__init__()
@@ -135,11 +136,13 @@ class MainWindow(QMainWindow):
         self.brush_size_action.triggered.connect(self.brush_size_call)
 
         self.brush_action = QAction(QIcon('./icons/brush.png'), 'Brush', self)
-        self.brush_action.triggered.connect(self.change2brush)
-        self.brush_action.setEnabled(False)
+        self.brush_action.triggered.connect(self.update_brush)
 
-        self.eraser_action = QAction(QIcon('./icons/eraser.png'), 'Eraser', self)
-        self.eraser_action.triggered.connect(self.change2eraser)
+        self.app_mode_action = QAction(QIcon('./icons/drawing.png'), 'Drawing', self)
+        self.app_mode_action.triggered.connect(self.update_app_mode)
+
+        self.split_action = QAction(QIcon('./icons/split.png'), 'Split', self)
+        self.split_action.triggered.connect(self.split_images)
 
         self.fit_window_action = QAction(QIcon('./icons/fit-to-page.png'), '&Fit Window', self)
         self.fit_window_action.setCheckable(True)
@@ -252,9 +255,10 @@ class MainWindow(QMainWindow):
 
         self.brush_size = 10
         self.drawing_mode = self.BRUSH_MODE
+        self.app_mode = self.DRAWING_MODE
 
         self.setWindowTitle(__appname__)
-        self.setMinimumSize(QSize(500, 500))
+        self.setMinimumSize(QSize(800, 600))
 
         self.statusBar().showMessage(str(self.tr("%s started.")) % __appname__)
         self.statusBar().show()
@@ -291,9 +295,10 @@ class MainWindow(QMainWindow):
 
         self.list_drawing_actions = (
             self.brush_action,
-            self.eraser_action,
+            self.app_mode_action,
             self.brush_size_action,
             self.brightness_contrast_action,
+            self.split_action,
         )
 
         self.brightness_contrast_values = {}
@@ -332,27 +337,112 @@ class MainWindow(QMainWindow):
         dialog = BrushDialog(self.brush_size, self.on_new_brush_size, parent=self)
         dialog.exec_()
 
-    def change2brush(self):
-        self.drawing_mode = self.BRUSH_MODE
+    def update_brush(self):
+        self.drawing_mode = 1 - self.drawing_mode
+        if self.drawing_mode == self.BRUSH_MODE:
+            self.brush_action.setIcon(QIcon('./icons/brush.png'))
+            self.brush_action.setText('Brush')
+        else:
+            self.brush_action.setIcon(QIcon('./icons/eraser.png'))
+            self.brush_action.setText('Eraser')
         self.update_drawing_mode()
-        self.brush_action.setEnabled(False)
-        self.eraser_action.setEnabled(True)
-
-    def change2eraser(self):
-        self.drawing_mode = self.ERASER_MODE
-        self.update_drawing_mode()
-        self.brush_action.setEnabled(True)
-        self.eraser_action.setEnabled(False)
 
     def update_drawing_mode(self):
         if self.drawing_mode == self.BRUSH_MODE:
             self.canvas.drawing_mode = self.canvas.BRUSH_MODE
         else:
             self.canvas.drawing_mode = self.canvas.ERASER_MODE
+        self.canvas.update()
+
+    def update_app_mode(self):
+        self.app_mode = 1 - self.app_mode
+        if self.app_mode == self.DRAWING_MODE:
+            self.app_mode_action.setIcon(QIcon('./icons/drawing.png'))
+            self.app_mode_action.setText('Draw Mode')
+            self.canvas.update_app_mode(self.canvas.DRAWING_MODE)
+        else:
+            self.app_mode_action.setIcon(QIcon('./icons/irregular-quadrilateral.png'))
+            self.app_mode_action.setText('Split Mode')
+            self.canvas.update_app_mode(self.canvas.SPLITTING_MODE)
+
+    def split_images(self):
+        if self.app_mode == self.DRAWING_MODE:
+            if self.split_dir and not osp.exists(osp.join(self.split_dir, 'defect')):
+                os.mkdir(osp.join(self.split_dir, 'defect'))
+
+            if self.split_dir and not osp.exists(osp.join(self.split_dir, 'normal')):
+                os.mkdir(osp.join(self.split_dir, 'normal'))
+
+            base_file = osp.basename(self.filename).split('.')[0]
+
+            image = cv2.cvtColor(self.image_data.image, cv2.COLOR_RGB2BGR)
+            mask = cv2.cvtColor(self.canvas.qpixmap2image(self.canvas.mask_pixmap), cv2.COLOR_RGB2BGR)
+
+            height, width = image.shape[:2]
+            
+            patch_size = self.output_block.size_spinbox.value()
+            half_patch_size = patch_size // 2
+            rotation_range = int(math.ceil(patch_size / math.sqrt(2))) + 1
+            step = self.output_block.stride_spinbox.value()
+            for i in range(0, height, step):
+                for j in range(0, width, step):
+                    y = i + half_patch_size
+                    x = j + half_patch_size
+                    str_y = f'{y}'.zfill(4)
+                    str_x = f'{x}'.zfill(4)
+
+                    if rotation_range < y < height - rotation_range - 1 and rotation_range < x < width - rotation_range - 1:
+                        istart = i + half_patch_size - rotation_range
+                        iend = i + half_patch_size + rotation_range
+                        jstart = j + half_patch_size - rotation_range
+                        jend = j + half_patch_size + rotation_range
+
+                        rot_patch = image[istart:iend,jstart:jend]
+                        for k in range(0, 360, 15):
+                            rot_mat = cv2.getRotationMatrix2D((rotation_range, rotation_range), k, 1.0)
+                            rotated = cv2.warpAffine(src=rot_patch, M=rot_mat, dsize=(rotation_range, rotation_range))
+                            patch = rotated[rotation_range-half_patch_size:rotation_range+half_patch_size,
+                                            rotation_range-half_patch_size:rotation_range+half_patch_size]
+
+                            itype = 'defect' if (patch[:, :, 0] == 0).any() else 'normal'
+                            split_file = osp.join(self.split_dir, f'{itype}/{base_file}-{y.zfill(4)}-{x.zfill(4)}-{k.zfill(3)}.png')
+
+                            cv2.imwrite(split_file, patch)
+                    else:
+                        patch = image[i:i+patch_size, j:j+patch_size]
+                        rot90 = cv2.rotate(patch, cv2.ROTATE_90_CLOCKWISE)
+                        rot180 = cv2.rotate(patch, cv2.ROTATE_180)
+                        rot270 = cv2.rotate(patch, cv2.ROTATE_90_COUNTERCLOCKWISE)
+
+                        itype = 'defect' if (rot90[:, :, 0] == 0).any() else 'normal'
+                        split_file = osp.join(self.split_dir, f'{itype}/{base_file}-{str_y}-{str_x}-090.png')
+                        cv2.imwrite(split_file, rot90)
+
+                        itype = 'defect' if (rot180[:, :, 0] == 0).any() else 'normal'
+                        split_file = osp.join(self.split_dir, f'{itype}/{base_file}-{str_y}-{str_x}-180.png')
+                        cv2.imwrite(split_file, rot180)
+
+                        itype = 'defect' if (rot270[:, :, 0] == 0).any() else 'normal'
+                        split_file = osp.join(self.split_dir, f'{itype}/{base_file}-{str_y}-{str_x}-270.png')
+                        cv2.imwrite(split_file, rot270)
+        else:
+            pts1, height, width = self.canvas.points.get_points()
+            pts2 = np.float32([[0, 0],[width, 0], [height, width],[0, height]])
+            transform = cv2.getPerspectiveTransform(pts1, pts2)
+
+            dst = cv2.warpPerspective(self.image_data.image, transform, (height, width))
+            dst = cv2.cvtColor(dst, cv2.COLOR_RGB2BGR)
+
+            split_file = f'{osp.splitext(self.filename)[0]}.png'
+            if self.split_dir and osp.exists(self.split_dir):
+                split_file_without_path = osp.basename(split_file)
+                split_file = osp.join(self.split_dir, split_file_without_path)
+
+            cv2.imwrite(split_file, dst)
 
     def on_new_brush_size(self, brush_size):
         self.brush_size = brush_size
-        self.canvas.brush_size = self.brush_size
+        self.canvas.update_brush_size(self.brush_size)
 
     def opendir_call(self, _value=False, dirpath=None):
         if not self.may_continue():
@@ -565,9 +655,9 @@ class MainWindow(QMainWindow):
             self.status(self.tr("Error reading %s") % filename)
             return False
 
-        # TODO: merge qimage and qmask
         self.canvas.loadPixmap(self.image_data.image, QPixmap.fromImage(self.image_data.qimage),
                                QPixmap.fromImage(self.image_data.qmask))
+
         self.set_clean()
         self.canvas.setEnabled(True)
         self.update_drawing_mode()
