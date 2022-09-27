@@ -1,6 +1,4 @@
-from PyQt5 import QtGui
 from PyQt5 import QtWidgets
-from PyQt5 import QtCore
 
 
 class OutputBlock(QtWidgets.QWidget):
@@ -24,7 +22,7 @@ class OutputBlock(QtWidgets.QWidget):
         self.stride_label = QtWidgets.QLabel('Stride:')
         self.stride_spinbox = QtWidgets.QSpinBox(self)
         self.stride_spinbox.setRange(1, 100)
-        self.stride_spinbox.setValue(24)
+        self.stride_spinbox.setValue(48)
 
         self.size_label = QtWidgets.QLabel('Size:')
         self.size_spinbox = QtWidgets.QSpinBox(self)

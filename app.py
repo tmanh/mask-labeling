@@ -391,21 +391,39 @@ class MainWindow(QMainWindow):
                     str_y = f'{y}'.zfill(4)
                     str_x = f'{x}'.zfill(4)
 
+                    patch = image[i:i+patch_size, j:j+patch_size]
+                    mask_patch = mask[i:i+patch_size, j:j+patch_size]
+                    itype = 'defect' if (mask_patch[:, :, 0] == 0).any() else 'normal'
+                    split_file = osp.join(self.split_dir, f'{itype}/{base_file}-{str_y}-{str_x}-000.png')
+                    cv2.imwrite(split_file, patch)
+
+                    """
                     if rotation_range < y < height - rotation_range - 1 and rotation_range < x < width - rotation_range - 1:
                         istart = i + half_patch_size - rotation_range
                         iend = i + half_patch_size + rotation_range
                         jstart = j + half_patch_size - rotation_range
                         jend = j + half_patch_size + rotation_range
 
+                        mask_patch = mask[i:i+patch_size, j:j+patch_size]
+                        angle = 15 if (mask_patch[:, :, 0] == 0).any() else 60
+
                         rot_patch = image[istart:iend,jstart:jend]
-                        for k in range(0, 360, 15):
+                        rot_mask_patch = mask[istart:iend,jstart:jend]
+                        for k in range(0, 360, angle):
+                            str_k = f'{k}'.zfill(3)
                             rot_mat = cv2.getRotationMatrix2D((rotation_range, rotation_range), k, 1.0)
-                            rotated = cv2.warpAffine(src=rot_patch, M=rot_mat, dsize=(rotation_range, rotation_range))
+
+                            rotated = cv2.warpAffine(src=rot_patch, M=rot_mat, dsize=(2 * rotation_range, 2 * rotation_range))
+                            rotated_mask = cv2.warpAffine(src=rot_mask_patch, M=rot_mat, dsize=(2 * rotation_range, 2 * rotation_range))
+
                             patch = rotated[rotation_range-half_patch_size:rotation_range+half_patch_size,
                                             rotation_range-half_patch_size:rotation_range+half_patch_size]
 
-                            itype = 'defect' if (patch[:, :, 0] == 0).any() else 'normal'
-                            split_file = osp.join(self.split_dir, f'{itype}/{base_file}-{y.zfill(4)}-{x.zfill(4)}-{k.zfill(3)}.png')
+                            mask_patch = rotated_mask[rotation_range-half_patch_size:rotation_range+half_patch_size,
+                                                      rotation_range-half_patch_size:rotation_range+half_patch_size]
+
+                            itype = 'defect' if (mask_patch[:, :, 0] == 0).any() else 'normal'
+                            split_file = osp.join(self.split_dir, f'{itype}/{base_file}-{str_y}-{str_x}-{str_k}.png')
 
                             cv2.imwrite(split_file, patch)
                     else:
@@ -414,17 +432,27 @@ class MainWindow(QMainWindow):
                         rot180 = cv2.rotate(patch, cv2.ROTATE_180)
                         rot270 = cv2.rotate(patch, cv2.ROTATE_90_COUNTERCLOCKWISE)
 
-                        itype = 'defect' if (rot90[:, :, 0] == 0).any() else 'normal'
+                        mask_patch = mask[i:i+patch_size, j:j+patch_size]
+                        mask_rot90 = cv2.rotate(mask_patch, cv2.ROTATE_90_CLOCKWISE)
+                        mask_rot180 = cv2.rotate(mask_patch, cv2.ROTATE_180)
+                        mask_rot270 = cv2.rotate(mask_patch, cv2.ROTATE_90_COUNTERCLOCKWISE)
+
+                        itype = 'defect' if (mask_patch[:, :, 0] == 0).any() else 'normal'
+                        split_file = osp.join(self.split_dir, f'{itype}/{base_file}-{str_y}-{str_x}-000.png')
+                        cv2.imwrite(split_file, patch)
+
+                        itype = 'defect' if (mask_rot270[:, :, 0] == 0).any() else 'normal'
                         split_file = osp.join(self.split_dir, f'{itype}/{base_file}-{str_y}-{str_x}-090.png')
                         cv2.imwrite(split_file, rot90)
 
-                        itype = 'defect' if (rot180[:, :, 0] == 0).any() else 'normal'
+                        itype = 'defect' if (mask_rot180[:, :, 0] == 0).any() else 'normal'
                         split_file = osp.join(self.split_dir, f'{itype}/{base_file}-{str_y}-{str_x}-180.png')
                         cv2.imwrite(split_file, rot180)
 
-                        itype = 'defect' if (rot270[:, :, 0] == 0).any() else 'normal'
+                        itype = 'defect' if (mask_rot270[:, :, 0] == 0).any() else 'normal'
                         split_file = osp.join(self.split_dir, f'{itype}/{base_file}-{str_y}-{str_x}-270.png')
                         cv2.imwrite(split_file, rot270)
+                    """
         else:
             pts1, height, width = self.canvas.points.get_points()
             pts2 = np.float32([[0, 0],[width, 0], [height, width],[0, height]])
